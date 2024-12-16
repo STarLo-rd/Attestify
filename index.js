@@ -10,15 +10,20 @@ const bip32 = BIP32Factory(ecc);
 // Enum for attestation statuses
 const AttestationStatus = {
   INITIATED: 'INITIATED',
-  ATTESTED: 'ATTESTED',  // Only two statuses now
+  ATTESTED: 'ATTESTED',
 };
 
-// Updated MutualAttestation class with HD key derivation using commitmentId
+// Updated MutualAttestation class with xpub-based verification
 class MutualAttestation {
     constructor(mnemonic, participantName) {
       this.name = participantName;
       this.masterNode = this.getMasterNodeFromMnemonic(mnemonic);
       this.attestedAssets = new Map(); // Store attested assets
+      
+      // Use a non-hardened derivation path for xpub
+      const xpubDerivationPath = "m/44'/0'/0'";
+      this.xpubNode = this.masterNode.derivePath(xpubDerivationPath).neutered();
+      this.xpub = this.xpubNode.toBase58();
     }
   
     // Generate master node from mnemonic
@@ -30,9 +35,24 @@ class MutualAttestation {
       return bip32.fromSeed(seed);
     }
   
-    // Derive key pair using commitmentId
+    // Derive public key using commitmentId and xpub
+    getPublicKeyFromCommitmentId(commitmentId) {
+      // Use non-hardened derivation for child keys
+      const derivationPath = `0/0/${parseInt(commitmentId, 10)}`;
+      const derivedNode = this.xpubNode.derive(0).derive(parseInt(commitmentId, 10));
+  
+      if (!derivedNode.publicKey) {
+        throw new Error('Failed to derive public key');
+      }
+  
+      const ecdsa = new ec('secp256k1');
+      return ecdsa.keyFromPublic(derivedNode.publicKey.toString('hex'), 'hex');
+    }
+  
+    // Derive private key for signing (kept for internal use)
     getKeyPairFromCommitmentId(commitmentId) {
-      const derivationPath = `m/44'/60'/0'/0/${parseInt(commitmentId, 10)}`;
+      // Use the corresponding derivation path for private key
+      const derivationPath = `m/44'/0'/0'/0/${parseInt(commitmentId, 10)}`;
       const derivedNode = this.masterNode.derivePath(derivationPath);
   
       if (!derivedNode.privateKey) {
@@ -65,16 +85,27 @@ class MutualAttestation {
           participant: this.name,
           signature: signature,
           timestamp: Date.now(),
+          xpub: this.xpub // Include xpub with the signature
         }],
         history: [`Asset initiated by ${this.name}`]
       };
     }
   
-    // Verify an asset's signature
-    verifyAssetSignature(attestation, otherKeyPair) {
+    // Verify an asset's signature using xpub
+    verifyAssetSignature(attestation, otherXpub) {
       try {
         const verificationHash = this.generateAssetHash(attestation.asset);
-        return otherKeyPair.verify(verificationHash, attestation.signature);
+        
+        // Create a BIP32 node from the other participant's xpub
+        const otherXpubNode = bip32.fromBase58(otherXpub);
+        
+        // Derive the public key for the specific commitment ID
+        const derivedNode = otherXpubNode.derive(0).derive(parseInt(attestation.asset.commitmentId, 10));
+        
+        const ecdsa = new ec('secp256k1');
+        const otherPublicKey = ecdsa.keyFromPublic(derivedNode.publicKey.toString('hex'), 'hex');
+        
+        return otherPublicKey.verify(verificationHash, attestation.signature);
       } catch (error) {
         console.error('Verification failed:', error);
         return false;
@@ -104,7 +135,8 @@ class MutualAttestation {
       attestation.participantSignatures.push({
         participant: this.name,
         signature: mySignature,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        xpub: this.xpub // Include xpub with the signature
       });
   
       attestation.status = AttestationStatus.ATTESTED;
@@ -121,9 +153,13 @@ class MutualAttestation {
   
     // Receive and validate an attestation
     receiveAttestation(fromParticipant, attestation) {
+      const latestSignature = attestation.participantSignatures[
+        attestation.participantSignatures.length - 1
+      ];
+      
       const isValid = this.verifyAssetSignature(
         attestation,
-        fromParticipant.getKeyPairFromCommitmentId(attestation.asset.commitmentId)
+        latestSignature.xpub
       );
   
       if (isValid) {
@@ -140,11 +176,16 @@ class MutualAttestation {
     getAllAttestations() {
       return Object.fromEntries(this.attestedAssets);
     }
+
+    // Get the extended public key
+    getExtendedPublicKey() {
+      return this.xpub;
+    }
   }
   
   // Demonstration function
-  function demonstrateAttestationWithHDKeys() {
-    console.log("\n--- Mutual Attestation with HD Key Derivation ---");
+  function demonstrateAttestationWithXpub() {
+    console.log("\n--- Mutual Attestation with Extended Public Key (xpub) ---");
   
     const supplier = new MutualAttestation(
       "empty expose treat boss purchase someone dawn later fat icon exile broccoli", 
@@ -167,7 +208,10 @@ class MutualAttestation {
       }
     };
   
-    console.log("Supplier initiates attestation...");
+    console.log("Supplier's Extended Public Key:", supplier.getExtendedPublicKey());
+    console.log("Buyer's Extended Public Key:", buyer.getExtendedPublicKey());
+  
+    console.log("\nSupplier initiates attestation...");
     const supplierAttestation = supplier.mutuallyAttest(buyer, supplyContract);
   
     console.log("Buyer responds and attests...");
@@ -181,4 +225,6 @@ class MutualAttestation {
   }
   
   // Run demonstration
-  demonstrateAttestationWithHDKeys();
+  demonstrateAttestationWithXpub();
+
+module.exports = { MutualAttestation, AttestationStatus };
