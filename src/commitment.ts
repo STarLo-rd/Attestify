@@ -21,6 +21,9 @@ export class Commitment {
 
   private committeePublicKey: Buffer;
   private committerPublicKey: Buffer;
+
+  private committerXpubkey: string;
+  private committeeXpubkey:string;
   private commitmentXpubkey: string;
 
   constructor(creatorId: number, committerId: number, assetPayload: AssetPayload) {
@@ -41,6 +44,9 @@ export class Commitment {
 
     this.committeePublicKey = Buffer.from(this.derivePublicKey(creator.mnemonic));
     this.committerPublicKey = Buffer.from(this.derivePublicKey(committer.mnemonic));
+
+    this.committeeXpubkey = this.deriveCommitmentXpubKey(creator.xpubkey, this.commitmentId);
+    this.committerXpubkey = this.deriveCommitmentXpubKey(committer.xpubkey, this.commitmentId)
     this.commitmentXpubkey = this.deriveCommitmentXpubKey(creator.xpubkey, this.commitmentId);
 
     Commitment.commitments.push(this);
@@ -53,13 +59,18 @@ export class Commitment {
     return derivedNode.publicKey;
   }
 
-  private deriveCommitmentXpubKey(creatorXpubkey: string, commitmentId: number): string {
-    const seed = bip39.mnemonicToSeedSync(creatorXpubkey);
-    const node = bip32.fromSeed(seed);
+  private deriveCommitmentXpubKey(xpubkey: string, commitmentId: number): string {
+    const node = bip32.fromBase58(xpubkey); // Use xpubkey directly
+    const commitmentPath = `m/44'/60'/0'/0/${commitmentId}`; // Derive commitment-specific path
+    const commitmentNode = node.derivePath(commitmentPath); // Derive child key
+    return commitmentNode.neutered().toBase58(); // Return derived xpubkey
+  }
 
-    const commitmentPath = `m/44'/60'/0'/0/${commitmentId}`;
-    const commitmentNode = node.derivePath(commitmentPath);
-    return commitmentNode.neutered().toBase58();
+  private derivePublicKeyFromXpub(xpubkey: string, commitmentId: number): Uint8Array {
+    const node = bip32.fromBase58(xpubkey); // Use xpubkey directly
+    const commitmentPath = `m/44'/60'/0'/0/${commitmentId}`; // Derive public key path
+    const derivedNode = node.derivePath(commitmentPath);
+    return derivedNode.publicKey;
   }
 
   static listCommitments(): CommitmentData[] {
@@ -103,14 +114,15 @@ export class Commitment {
   }
 
   verifyCommitmentSignature(userId: number, signature: Buffer): boolean {
-    let publicKey: Buffer;
+    let xpubkey: any;
     if (userId === this.creatorId) {
-      publicKey = this.committeePublicKey;
+      xpubkey = this.committeeXpubkey;
     } else if (userId === this.committerId) {
-      publicKey = this.committerPublicKey;
+      xpubkey = this.committeeXpubkey;
     } else {
       throw new Error('User is neither the creator nor the committer');
     }
+    let publicKey = this.derivePublicKeyFromXpub(xpubkey, this.committerId);
 
     const hash = crypto.createHash('sha256')
       .update(JSON.stringify(this.assetPayload))
