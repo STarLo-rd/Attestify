@@ -1,7 +1,7 @@
-import * as bip39 from 'bip39';
-import * as ecc from 'tiny-secp256k1';
-import { BIP32Factory } from 'bip32';
-import { UserData } from './types';
+import * as bip39 from "bip39";
+import * as ecc from "tiny-secp256k1";
+import { BIP32Factory } from "bip32";
+import { UserData } from "./types";
 
 const bip32 = BIP32Factory(ecc);
 
@@ -24,12 +24,14 @@ export class Users {
 
   private deriveXpubKey(mnemonic: string): string {
     const seed = bip39.mnemonicToSeedSync(mnemonic);
-    const node = bip32.fromSeed(seed);
-    return node.neutered().toBase58();
+    const root = bip32.fromSeed(seed);
+    const path = "m/44'/0'/0'";
+    const account = root.derivePath(path);
+    return account.neutered().toBase58();
   }
 
   static listUsers(): UserData[] {
-    return Users.users.map(user => ({
+    return Users.users.map((user) => ({
       id: user.id,
       name: user.name,
       xpubkey: user.xpubkey,
@@ -37,7 +39,7 @@ export class Users {
   }
 
   static findById(id: number): Users | undefined {
-    return Users.users.find(user => user.id === id);
+    return Users.users.find((user) => user.id === id);
   }
 
   static generateMnemonic(): string {

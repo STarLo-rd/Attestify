@@ -1,9 +1,9 @@
-import * as bip39 from 'bip39';
-import * as ecc from 'tiny-secp256k1';
-import { BIP32Factory } from 'bip32';
-import * as crypto from 'crypto';
-import { Users } from './users';
-import { AssetPayload, CommitmentStatus, CommitmentData } from './types';
+import * as bip39 from "bip39";
+import * as ecc from "tiny-secp256k1";
+import { BIP32Factory } from "bip32";
+import * as crypto from "crypto";
+import { Users } from "./users";
+import { AssetPayload, CommitmentStatus, CommitmentData } from "./types";
 
 const bip32 = BIP32Factory(ecc);
 
@@ -16,22 +16,21 @@ export class Commitment {
   public committerId: number;
   public assetPayload: AssetPayload;
   public status: CommitmentStatus;
-  public committeeSignature: Buffer | null;
-  public committerSignature: Buffer | null;
-
-  private committeePublicKey: Buffer;
-  private committerPublicKey: Buffer;
+  public committeeSignature: any;
+  public committerSignature: any;
 
   private committerXpubkey: string;
-  private committeeXpubkey:string;
-  private commitmentXpubkey: string;
-
-  constructor(creatorId: number, committerId: number, assetPayload: AssetPayload) {
+  private committeeXpubkey: string;
+  constructor(
+    creatorId: number,
+    committerId: number,
+    assetPayload: AssetPayload
+  ) {
     this.commitmentId = ++Commitment.commitmentId;
     this.creatorId = creatorId;
     this.committerId = committerId;
     this.assetPayload = assetPayload;
-    this.status = 'INITIATED';
+    this.status = "INITIATED";
     this.committeeSignature = null;
     this.committerSignature = null;
 
@@ -42,108 +41,108 @@ export class Commitment {
       throw new Error("Both creator and committer must be valid users");
     }
 
-    this.committeePublicKey = Buffer.from(this.derivePublicKey(creator.mnemonic));
-    this.committerPublicKey = Buffer.from(this.derivePublicKey(committer.mnemonic));
-
-    this.committeeXpubkey = this.deriveCommitmentXpubKey(creator.xpubkey, this.commitmentId);
-    this.committerXpubkey = this.deriveCommitmentXpubKey(committer.xpubkey, this.commitmentId)
-    this.commitmentXpubkey = this.deriveCommitmentXpubKey(creator.xpubkey, this.commitmentId);
+    this.committeeXpubkey = this.deriveCommitmentXpubKey(
+      creator.xpubkey,
+      this.commitmentId
+    );
+    this.committerXpubkey = this.deriveCommitmentXpubKey(
+      committer.xpubkey,
+      this.commitmentId
+    );
 
     Commitment.commitments.push(this);
   }
 
-  private derivePublicKey(mnemonic: string): Uint8Array {
-    const seed = bip39.mnemonicToSeedSync(mnemonic);
-    const node = bip32.fromSeed(seed);
-    const derivedNode = node.derive(0).derive(0);
-    return derivedNode.publicKey;
-  }
-
-  private deriveCommitmentXpubKey(xpubkey: string, commitmentId: number): string {
-    const node = bip32.fromBase58(xpubkey); // Use xpubkey directly
-    const commitmentPath = `m/44'/60'/0'/0/${commitmentId}`; // Derive commitment-specific path
-    const commitmentNode = node.derivePath(commitmentPath); // Derive child key
-    return commitmentNode.neutered().toBase58(); // Return derived xpubkey
-  }
-
-  private derivePublicKeyFromXpub(xpubkey: string, commitmentId: number): Uint8Array {
-    const node = bip32.fromBase58(xpubkey); // Use xpubkey directly
-    const commitmentPath = `m/44'/60'/0'/0/${commitmentId}`; // Derive public key path
-    const derivedNode = node.derivePath(commitmentPath);
-    return derivedNode.publicKey;
+  private deriveCommitmentXpubKey(
+    parentXpub: string,
+    commitmentId: number
+  ): string {
+    const parentNode = bip32.fromBase58(parentXpub);
+    const childNode = parentNode.derive(commitmentId);
+    return childNode.neutered().toBase58();
   }
 
   static listCommitments(): CommitmentData[] {
-    return Commitment.commitments.map(commitment => ({
+    return Commitment.commitments.map((commitment) => ({
       commitmentId: commitment.commitmentId,
       creatorId: commitment.creatorId,
       committerId: commitment.committerId,
       status: commitment.status,
-      assetPayload: commitment.assetPayload
+      assetPayload: commitment.assetPayload,
     }));
   }
 
+  // In the signCommitment method, add null check for privateKey
   signCommitment(userId: number, mnemonic: string): void {
     const user = Users.findById(userId);
-    if (!user) throw new Error('User not found');
+    if (!user) throw new Error("User not found");
 
     const seed = bip39.mnemonicToSeedSync(mnemonic);
-    const node = bip32.fromSeed(seed);
+    const root = bip32.fromSeed(seed);
+    const node = root.derivePath(`m/44'/0'/0'/${this.commitmentId}`);
 
-    const privateKeyNode = node.derive(0).derive(0);
-    const privateKey = privateKeyNode.privateKey;
-    if (!privateKey) throw new Error('Failed to derive private key');
+    if (!node.privateKey) {
+      throw new Error("Private key not available");
+    }
 
-    const hash = crypto.createHash('sha256')
+    const hash = crypto
+      .createHash("sha256")
       .update(JSON.stringify(this.assetPayload))
       .digest();
 
-    const signature = Buffer.from(ecc.sign(hash, privateKey));
+    const signature = ecc.sign(hash, node.privateKey);
 
     if (userId === this.creatorId) {
       this.committeeSignature = signature;
     } else if (userId === this.committerId) {
       this.committerSignature = signature;
     } else {
-      throw new Error('User is neither the creator nor the committer');
+      throw new Error("User is neither the creator nor the committer");
     }
 
     if (this.committeeSignature && this.committerSignature) {
-      this.status = 'ACKNOWLEDGED';
+      this.status = "ACKNOWLEDGED";
     }
   }
 
-  verifyCommitmentSignature(userId: number, signature: Buffer): boolean {
+  verifyCommitmentSignature(userId: number, signature: any): boolean {
     let xpubkey: any;
     if (userId === this.creatorId) {
       xpubkey = this.committeeXpubkey;
     } else if (userId === this.committerId) {
-      xpubkey = this.committeeXpubkey;
+      xpubkey = this.committerXpubkey;
     } else {
-      throw new Error('User is neither the creator nor the committer');
+      throw new Error("User is neither the creator nor the committer");
     }
-    let publicKey = this.derivePublicKeyFromXpub(xpubkey, this.committerId);
+    const node = bip32.fromBase58(xpubkey);
 
-    const hash = crypto.createHash('sha256')
+    const hash = crypto
+      .createHash("sha256")
       .update(JSON.stringify(this.assetPayload))
       .digest();
-    
-    return ecc.verify(hash, publicKey, signature);
+
+    return ecc.verify(hash, node.publicKey, signature);
   }
 
   dischargeCommitment(): boolean {
     if (!this.committeeSignature || !this.committerSignature) {
-      throw new Error('Cannot discharge: Missing signatures');
+      throw new Error("Cannot discharge: Missing signatures");
     }
 
-    const committeeSignatureValid = this.verifyCommitmentSignature(this.creatorId, this.committeeSignature);
-    const committerSignatureValid = this.verifyCommitmentSignature(this.committerId, this.committerSignature);
+    const committeeSignatureValid = this.verifyCommitmentSignature(
+      this.creatorId,
+      this.committeeSignature
+    );
+    const committerSignatureValid = this.verifyCommitmentSignature(
+      this.committerId,
+      this.committerSignature
+    );
 
     if (committeeSignatureValid && committerSignatureValid) {
-      this.status = 'DISCHARGED';
+      this.status = "DISCHARGED";
       return true;
     } else {
-      throw new Error('Cannot discharge: Invalid signatures');
+      throw new Error("Cannot discharge: Invalid signatures");
     }
   }
 
@@ -153,7 +152,7 @@ export class Commitment {
       creatorId: this.creatorId,
       committerId: this.committerId,
       status: this.status,
-      assetPayload: this.assetPayload
+      assetPayload: this.assetPayload,
     };
   }
 }
