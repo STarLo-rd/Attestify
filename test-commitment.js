@@ -1,181 +1,84 @@
-const bip39 = require('bip39');
-const ecc = require('tiny-secp256k1');
-const { BIP32Factory } = require('bip32');
-const crypto = require('crypto');
+const bip39 = require('bip39')
+const { BIP32Factory } = require('bip32')
+const ecc = require('tiny-secp256k1')
+const crypto = require('crypto')
 
-const bip32 = BIP32Factory(ecc);
+const bip32 = BIP32Factory(ecc)
 
-// Mock Users class for testing
 class Users {
+    static users = {}
+
+    static initialize() {
+        // Create two test users
+        this.createNewUser(1)
+        this.createNewUser(2)
+    }
+
     static findById(id) {
-        const testUsers = { 
-            1: {
-                id: 1,
-                mnemonic: "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
-                xpubkey: "xpub6BosfCnifzxcFwrSzQiqu2DBVTshkCXacvNsWGYJVVhhawA7d4R5WSWGFNbi8Aw6ZRc1brxMyWMzG3DSSSSoekkudhUd9yLb6qx39T9nMdj"
-            },
-            2: {
-                id: 2,
-                mnemonic: "void come effort suffer camp survey warrior heavy shoot primary clutch crush open amazing screen patrol group space point ten exist slush involve unfold",
-                xpubkey: "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2jkwSB1icqYh2cfDfVxdx4df189oLKnC5fSwqPfgyP3hooxujYzAu3fDVmz"
-            }
-        };
-        return testUsers[id];
+        return this.users[id]
+    }
+
+    static createNewUser(id) {
+        const mnemonic = bip39.generateMnemonic()
+        const seed = bip39.mnemonicToSeedSync(mnemonic)
+        const root = bip32.fromSeed(seed)
+        const path = "m/44'/0'/0'"
+        const account = root.derivePath(path)
+        const xpubkey = account.neutered().toBase58()
+
+        const newUser = { id, mnemonic, xpubkey }
+        this.users[id] = newUser
+        return newUser
     }
 }
 
 class Commitment {
-    constructor(creatorId, committerId, commitmentId, assetPayload) {
-        this.creatorId = creatorId;
-        this.committerId = committerId;
-        this.commitmentId = commitmentId;
-        this.assetPayload = assetPayload;
-        this.status = 'PENDING';
-        
-        // Initialize commitment
-        const creator = Users.findById(creatorId);
-        const committer = Users.findById(committerId);
-        
-        if (!creator || !committer) {
-            throw new Error("Both creator and committer must be valid users");
-        }
+    constructor(committerId, committeeId, commitmentId) {
+        this.commitmentId = commitmentId
+        this.committerId = committerId
+        this.committeeId = committeeId
 
-        this.committeeXpubkey = this.deriveCommitmentXpubKey(creator.xpubkey, this.commitmentId);
-        this.committerXpubkey = this.deriveCommitmentXpubKey(committer.xpubkey, this.commitmentId);
+        const committee = Users.findById(committeeId)
+        const committer = Users.findById(committerId)
+
+        this.committeeXpubkey = this.deriveCommitmentXpubKey(committee.xpubkey, this.commitmentId)
+        this.committerXpubkey = this.deriveCommitmentXpubKey(committer.xpubkey, this.commitmentId)
     }
 
-    deriveCommitmentXpubKey(parentXpubkey, commitmentId) {
-        try {
-            const node = bip32.fromBase58(parentXpubkey); // Must be the master key
-            const commitmentPath = `m/44'/60'/0'/0/${commitmentId}`; // Correct path
-            const commitmentNode = node.derivePath(commitmentPath); // Derive correctly
-            return commitmentNode.neutered().toBase58(); // Return the neutered (xpub) key
-        } catch (error) {
-            throw new Error(`Failed to derive commitment xpubkey: ${error.message}`);
-        }
-    }
-    
-
-    signCommitment(userId, mnemonic) {
-        const user = Users.findById(userId);
-        if (!user) throw new Error('User not found');
-
-        const seed = bip39.mnemonicToSeedSync(mnemonic);
-        const node = bip32.fromSeed(seed);
-        const commitmentPath = `m/44'/60'/0'/0/${this.commitmentId}`;
-        const privateKeyNode = node.derivePath(commitmentPath);
-        const privateKey = privateKeyNode.privateKey;
-        
-        if (!privateKey) throw new Error('Failed to derive private key');
-
-        const hash = crypto.createHash('sha256')
-            .update(JSON.stringify(this.assetPayload))
-            .digest();
-        
-        const signature = Buffer.from(ecc.sign(hash, privateKey));
-
-        if (userId === this.creatorId) {
-            this.committeeSignature = signature;
-        } else if (userId === this.committerId) {
-            this.committerSignature = signature;
-        } else {
-            throw new Error('User is neither the creator nor the committer');
-        }
-
-        if (this.committeeSignature && this.committerSignature) {
-            this.status = 'ACKNOWLEDGED';
-        }
+    deriveCommitmentXpubKey(parentXpub, commitmentId) {
+        const parentNode = bip32.fromBase58(parentXpub)
+        const childNode = parentNode.derive(commitmentId)
+        return childNode.neutered().toBase58()
     }
 
-    verifyCommitmentSignature(userId, signature) {
-        let xpubkey;
-    
-        if (userId === this.creatorId) {
-            xpubkey = Users.findById(this.creatorId).xpubkey;
-        } else if (userId === this.committerId) {
-            xpubkey = Users.findById(this.committerId).xpubkey;
-        } else {
-            throw new Error('User is neither the creator nor the committer');
-        }
-    
-        try {
-            const node = bip32.fromBase58(xpubkey); // Must be master xpub
-            const commitmentPath = `m/44'/60'/0'/0/${this.commitmentId}`; // Match signing path
-            const derivedNode = node.derivePath(commitmentPath);
-            const publicKey = derivedNode.publicKey; // Extract the public key
-    
-            const hash = crypto.createHash('sha256')
-                .update(JSON.stringify(this.assetPayload))
-                .digest();
-    
-            const isValid = ecc.verify(hash, publicKey, signature);
-    
-            return isValid;
-        } catch (error) {
-            console.error('Verification failed:', error.message);
-            return false;
-        }
-    }
-    
-    
-    
-}
-
-// Test script
-async function runTests() {
-    console.log('Starting commitment tests...');
-
-    try {
-        // Test data
-        const creatorId = 1;
-        const committerId = 2;
-        const commitmentId = 123;
-        const assetPayload = {
-            type: "TEST_ASSET",
-            value: 1000,
-            timestamp: Date.now()
-        };
-
-        // Create commitment
-        console.log('\nCreating new commitment...');
-        const commitment = new Commitment(creatorId, committerId, commitmentId, assetPayload);
-        console.log('Commitment created successfully');
-
-        // Test creator signing
-        console.log('\nTesting creator signature...');
-        const creator = Users.findById(creatorId);
-        commitment.signCommitment(creatorId, creator.mnemonic);
-        const creatorVerification = commitment.verifyCommitmentSignature(
-            creatorId, 
-            commitment.committeeSignature
-        );
-        console.log('Creator signature verification:', creatorVerification);
-
-        // Test committer signing
-        console.log('\nTesting committer signature...');
-        const committer = Users.findById(committerId);
-        commitment.signCommitment(committerId, committer.mnemonic);
-        const committerVerification = commitment.verifyCommitmentSignature(
-            committerId, 
-            commitment.committerSignature
-        );
-        console.log('Committer signature verification:', committerVerification);
-
-        // Test final status
-        console.log('\nFinal commitment status:', commitment.status);
+    signMessage(message, userMnemonic) {
+        const seed = bip39.mnemonicToSeedSync(userMnemonic)
+        const root = bip32.fromSeed(seed)
+        const node = root.derivePath(`m/44'/0'/0'/${this.commitmentId}`)
         
-        // Test invalid user
-        console.log('\nTesting invalid user...');
-        try {
-            commitment.verifyCommitmentSignature(999, Buffer.from('invalid'));
-        } catch (error) {
-            console.log('Invalid user test passed:', error.message);
-        }
+        const messageHash = crypto.createHash('sha256').update(message).digest()
+        return ecc.sign(messageHash, node.privateKey)
+    }
 
-    } catch (error) {
-        console.error('Test failed:', error);
+    verifySignature(message, signature, isCommitter) {
+        const xpubkey = isCommitter ? this.committerXpubkey : this.committeeXpubkey
+        const node = bip32.fromBase58(xpubkey)
+        
+        const messageHash = crypto.createHash('sha256').update(message).digest()
+        return ecc.verify(messageHash, node.publicKey, signature)
     }
 }
 
-// Run the tests
-runTests().then(() => console.log('\nTests completed'));
+// Example usage:
+Users.initialize()
+
+const commitment = new Commitment(1, 2, 1) // commitmentId = 1
+const message = "Test message"
+
+// Sign with committer's key
+const committer = Users.findById(1)
+const signature = commitment.signMessage(message, committer.mnemonic)
+
+// Verify signature
+const isValid = commitment.verifySignature(message, signature, true)
+console.log('Signature verification:', isValid)
