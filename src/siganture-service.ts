@@ -2,6 +2,7 @@ import * as ecc from "tiny-secp256k1";
 import { createHash } from "crypto";
 import { BIP32Factory, BIP32Interface } from "bip32";
 import { AttestationError } from "./utils";
+import { ERROR_CODES, ERROR_MESSAGES } from "./constants";
 
 export class SignatureService {
   public static readonly bip32 = BIP32Factory(ecc);
@@ -25,8 +26,8 @@ export class SignatureService {
       return ecc.verify(hash, node.publicKey, Buffer.from(signature, "hex"));
     } catch (error) {
       throw new AttestationError(
-        `Signature verification failed: ${(error as Error).message}`,
-        "SIGNATURE_VERIFICATION_FAILED"
+        ERROR_MESSAGES.SIGNATURE_VERIFICATION_FAILED((error as Error).message),
+        ERROR_CODES.SIGNATURE_VERIFICATION_FAILED
       );
     }
   }
@@ -41,8 +42,8 @@ export class SignatureService {
       return Buffer.from(signature).toString("hex");
     } catch (error) {
       throw new AttestationError(
-        `Failed to create signature:  ${(error as Error).message}`,
-        "SIGNATURE_CREATION_FAILED"
+        ERROR_MESSAGES.SIGNATURE_CREATION_FAILED((error as Error).message),
+        ERROR_CODES.SIGNATURE_CREATION_FAILED
       );
     }
   }
@@ -61,13 +62,16 @@ export class SignatureService {
     try {
       const node = this.bip32.fromBase58(publicKey);
       if (!node.publicKey) {
-        throw new AttestationError("Invalid public key", "INVALID_PUBLIC_KEY");
+        throw new AttestationError(
+          ERROR_MESSAGES.INVALID_PUBLIC_KEY,
+          ERROR_CODES.INVALID_PUBLIC_KEY
+        );
       }
       return node;
     } catch (error) {
       throw new AttestationError(
-        `Invalid public key format: ${(error as Error).message}`,
-        "INVALID_PUBLIC_KEY_FORMAT"
+        ERROR_MESSAGES.INVALID_PUBLIC_KEY_FORMAT((error as Error).message),
+        ERROR_CODES.INVALID_PUBLIC_KEY_FORMAT
       );
     }
   }

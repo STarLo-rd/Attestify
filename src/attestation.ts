@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import { createHash } from "crypto";
 import * as bip39 from "bip39";
 import { SignatureService } from "./siganture-service";
+import { ERROR_CODES, ERROR_MESSAGES } from "./constants";
 
 /**
  * Represents an attestation lifecycle, facilitating state transitions
@@ -245,18 +246,6 @@ export class Attestation {
   }
 
   /**
-   * Initiates the attestation process.
-   *
-   * @throws Will throw an error if the attestation has already been initiated or the data provided in invalid.
-   */
-  initiateAttestation(): void {
-    if (this.commitmentState !== Attest.INITIATED) {
-      throw new Error("Attestation is already initiated.");
-    }
-    this.commitmentState = Attest.INITIATED;
-  }
-
-  /**
    * Signs the attestation payload using the mnemonic.
    *
    * Derives a private key from the mnemonic using the adjusted derivation path
@@ -274,7 +263,10 @@ export class Attestation {
       const node = root.derivePath(fullDerivationPath);
 
       if (!node.privateKey) {
-        throw new Error("Private key not available");
+        throw new AttestationError(
+          ERROR_MESSAGES.PRIVATE_KEY_UNAVAILABLE,
+          ERROR_CODES.SIGNING_FAILED
+        );
       }
       const privateKeyBuffer = Buffer.from(node.privateKey);
       const signature = SignatureService.createSignature(
@@ -285,8 +277,8 @@ export class Attestation {
       return Buffer.from(signature).toString("hex");
     } catch (error) {
       throw new AttestationError(
-        `Failed to sign payload: ${(error as Error).message}`,
-        "SIGNING_FAILED"
+        ERROR_MESSAGES.SIGNING_FAILED((error as Error).message),
+        ERROR_CODES.SIGNING_FAILED
       );
     }
   }
@@ -306,24 +298,24 @@ export class Attestation {
     // Validate current state
     if (this.commitmentState !== currentState) {
       throw new AttestationError(
-        `Invalid state transition. Expected ${currentState}, got ${this.commitmentState}`,
-        "INVALID_STATE"
+        ERROR_MESSAGES.INVALID_STATE(currentState, this.commitmentState),
+        ERROR_CODES.INVALID_STATE
       );
     }
 
     const signature = this.getSignatureForType(signatureType);
     if (!signature) {
       throw new AttestationError(
-        `${signatureType} signature required for ${newState} state`,
-        "MISSING_SIGNATURE"
+        ERROR_MESSAGES.MISSING_SIGNATURE(signatureType, newState),
+        ERROR_CODES.MISSING_SIGNATURE
       );
     }
 
     // Verify signature
     if (!this.verifySignature(signatureType, signature)) {
       throw new AttestationError(
-        `Invalid ${signatureType} signature`,
-        "INVALID_SIGNATURE"
+        ERROR_MESSAGES.INVALID_SIGNATURE(signatureType),
+        ERROR_CODES.INVALID_SIGNATURE
       );
     }
   }
@@ -344,10 +336,26 @@ export class Attestation {
         return this.dischargeSignature;
       default:
         throw new AttestationError(
-          "Invalid signature type",
-          "INVALID_SIGNATURE_TYPE"
+          ERROR_MESSAGES.INVALID_SIGNATURE_TYPE,
+          ERROR_CODES.INVALID_SIGNATURE_TYPE
         );
     }
+  }
+
+  /**
+   * Initiates the attestation process.
+   *
+   * @throws Will throw an error if the attestation has already been initiated or the data provided in invalid.
+   */
+  initiateAttestation(): void {
+    if (this.commitmentState !== Attest.INITIATED) {
+      throw new AttestationError(
+        ERROR_MESSAGES.ALREADY_INITIATED,
+        ERROR_CODES.INVALID_STATE
+      );
+    }
+
+    this.commitmentState = Attest.INITIATED;
   }
 
   /**
