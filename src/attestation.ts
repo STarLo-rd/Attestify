@@ -125,7 +125,6 @@ export class Attestation {
     this.committerSignature = committerSignature;
     this.dischargeSignature = dischargeSignature;
 
-    // TODO : validate status
     this.commitmentState = commitmentState;
   }
 

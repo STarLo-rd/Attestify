@@ -1,4 +1,4 @@
-import { AssetPayload, CommitmentStatus, CommitmentData } from './types';
+import { AssetPayload, CommitmentStatus, CommitmentData } from "./types";
 export declare class Commitment {
     private static commitments;
     private static commitmentId;
@@ -7,17 +7,15 @@ export declare class Commitment {
     committerId: number;
     assetPayload: AssetPayload;
     status: CommitmentStatus;
-    committeeSignature: Buffer | null;
-    committerSignature: Buffer | null;
-    private committeePublicKey;
-    private committerPublicKey;
-    private commitmentXpubkey;
+    committeeSignature: any;
+    committerSignature: any;
+    private committerXpubkey;
+    private committeeXpubkey;
     constructor(creatorId: number, committerId: number, assetPayload: AssetPayload);
-    private derivePublicKey;
     private deriveCommitmentXpubKey;
     static listCommitments(): CommitmentData[];
     signCommitment(userId: number, mnemonic: string): void;
-    verifyCommitmentSignature(userId: number, signature: Buffer): boolean;
+    verifyCommitmentSignature(userId: number, signature: any): boolean;
     dischargeCommitment(): boolean;
     getStatus(): CommitmentData;
 }

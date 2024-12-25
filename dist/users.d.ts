@@ -1,4 +1,4 @@
-import { UserData } from './types';
+import { UserData } from "./types";
 export declare class Users {
     private static userId;
     private static users;
