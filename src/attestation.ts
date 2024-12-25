@@ -1,4 +1,9 @@
 import { Attest } from "./utils";
+import { v4 as uuidv4 } from 'uuid';
+import * as ecc from "tiny-secp256k1";
+import { createHash } from 'crypto';
+import { BIP32Factory } from "bip32";
+const bip32 = BIP32Factory(ecc);
 
 /**
  * Represents an attestation lifecycle, facilitating state transitions
@@ -53,7 +58,7 @@ export class Attestation {
     /**
      * Digital signature of the committer for discharge.
      */
-    private dischargeSignature: string = ""; // TODO getter and setter 
+    private dischargeSignature: string = ""; 
 
     /**
      * Creates an instance of the Attestation class.
@@ -76,12 +81,12 @@ export class Attestation {
         this.committeeXpub = committeeXpub;
         this.attestationPayload = payload;
 
-        // TODO : ID should be optional - generate a UUID if not provided
-        this.attestationId = attestationId;
+        // Generate UUID if attestationId is not provided
+        this.attestationId = attestationId || uuidv4();
 
-        // TODO : derive keys on the fly
-        this.committer = "committer";
-        this.committee = "committee";
+        // Derive specific keys for this attestation
+        this.committer = this.deriveChildPubKey(committerXpub, this.attestationId);
+        this.committee = this.deriveChildPubKey(committeeXpub, this.attestationId);
 
         // TODO : verify signature before assigning
         this.committeeSignature = committeeSignature;
@@ -89,6 +94,56 @@ export class Attestation {
 
         // TODO : validate status
         this.commitmentState = commitmentState
+    }
+
+     /**
+     * Converts a UUID into a deterministic BIP32 index.
+     * The resulting index will be within the BIP32 hardened index range (0x80000000 to 0xFFFFFFFF)
+     * 
+     * @param uuid - The UUID to convert
+     * @returns A deterministic number suitable for BIP32 derivation
+     * @private
+     */
+     private uuidToDerivationIndex(uuid: string): number {
+        // Remove hyphens and convert to Buffer
+        const cleanUuid = Buffer.from(uuid.replace(/-/g, ''), 'hex');
+        
+        // Create SHA256 hash of UUID
+        const hash = createHash('sha256').update(cleanUuid).digest();
+        
+        // Take the first 4 bytes and convert to number
+        const index = hash.readUInt32BE(0);
+        
+        // Ensure the index is hardened (add 0x80000000)
+        // This is standard practice for BIP32 key derivation
+        return index | 0x80000000;
+    }
+
+
+     /**
+     * Derives a child public key from a parent extended public key using the attestation ID.
+     * 
+     * @param parentXpub - The parent extended public key
+     * @param attestationId - The attestation ID to use for derivation
+     * @returns The derived child public key in base58 format
+     * @private
+     */
+     private deriveChildPubKey(parentXpub: string, attestationId: string): string {
+        try {
+            // Convert UUID to derivation index
+            const derivationIndex = this.uuidToDerivationIndex(attestationId);
+            
+            // Create parent node from xpub
+            const parentNode = bip32.fromBase58(parentXpub);
+            
+            // Derive child node using calculated index
+            const childNode = parentNode.derive(derivationIndex);
+            
+            // Return neutered (public-only) base58 string
+            return childNode.neutered().toBase58();
+        } catch (error) {
+            throw new Error(`Failed to derive child public key: ${error}`);
+        }
     }
 
     /**
@@ -125,6 +180,24 @@ export class Attestation {
      */
     setCommitterSignature(signature: string): void {
         this.committerSignature = signature;
+    }
+
+    /**
+     * Retrieves the discharge signature.
+     * 
+     * @returns The digital signature for discharge.
+     */
+    getDischargeSignature(): string {
+        return this.dischargeSignature;
+    }
+
+    /**
+     * Sets the discharge signature.
+     * 
+     * @param signature - The digital signature for discharge to set.
+     */
+    setDischargeSignature(signature: string): void {
+        this.dischargeSignature = signature;
     }
 
     /**
