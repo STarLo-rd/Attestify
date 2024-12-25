@@ -99,24 +99,24 @@ export class Attestation {
     if (committeeSignature) {
       if (!this.verifySignature("committer", committerSignature)) {
         throw new AttestationError(
-          "Invalid committer signature",
-          "INVALID_SIGNATURE"
+          ERROR_MESSAGES.INVALID_SIGNATURE("committer"),
+          ERROR_CODES.INVALID_SIGNATURE
         );
       }
     }
     if (committeeSignature) {
       if (!this.verifySignature("committee", committeeSignature)) {
         throw new AttestationError(
-          "Invalid committee signature",
-          "INVALID_SIGNATURE"
+          ERROR_MESSAGES.INVALID_SIGNATURE("committee"),
+          ERROR_CODES.INVALID_SIGNATURE
         );
       }
     }
     if (dischargeSignature) {
       if (!this.verifySignature("discharge", dischargeSignature)) {
         throw new AttestationError(
-          "Invalid discharge signature",
-          "INVALID_SIGNATURE"
+          ERROR_MESSAGES.INVALID_SIGNATURE("discharge"),
+          ERROR_CODES.INVALID_SIGNATURE
         );
       }
     }
@@ -172,8 +172,8 @@ export class Attestation {
       return childNode.neutered().toBase58();
     } catch (error) {
       throw new AttestationError(
-        `Failed to derive child public key: ${(error as Error).message}`,
-        "DERIVATION_FAILED"
+        ERROR_MESSAGES.DERIVATION_FAILED((error as Error).message),
+        ERROR_CODES.DERIVATION_FAILED
       );
     }
   }
