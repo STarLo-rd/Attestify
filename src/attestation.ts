@@ -292,18 +292,75 @@ export class Attestation {
   }
 
   /**
+   * Validates state transition requirements and performs the transition
+   * @param currentState - Required current state
+   * @param newState - State to transition to
+   * @param signatureType - Type of signature to validate
+   * @private
+   */
+  private validateStateTransition(
+    currentState: Attest,
+    newState: Attest,
+    signatureType: "committee" | "committer" | "discharge"
+  ): void {
+    // Validate current state
+    if (this.commitmentState !== currentState) {
+      throw new AttestationError(
+        `Invalid state transition. Expected ${currentState}, got ${this.commitmentState}`,
+        "INVALID_STATE"
+      );
+    }
+
+    const signature = this.getSignatureForType(signatureType);
+    if (!signature) {
+      throw new AttestationError(
+        `${signatureType} signature required for ${newState} state`,
+        "MISSING_SIGNATURE"
+      );
+    }
+
+    // Verify signature
+    if (!this.verifySignature(signatureType, signature)) {
+      throw new AttestationError(
+        `Invalid ${signatureType} signature`,
+        "INVALID_SIGNATURE"
+      );
+    }
+  }
+
+  /**
+   * Helper method to get signature based on type
+   * @private
+   */
+  private getSignatureForType(
+    type: "committee" | "committer" | "discharge"
+  ): string {
+    switch (type) {
+      case "committee":
+        return this.committeeSignature;
+      case "committer":
+        return this.committerSignature;
+      case "discharge":
+        return this.dischargeSignature;
+      default:
+        throw new AttestationError(
+          "Invalid signature type",
+          "INVALID_SIGNATURE_TYPE"
+        );
+    }
+  }
+
+  /**
    * Acknowledges the attestation, transitioning its state.
    *
    * @throws Will throw an error if the attestation is not in the "INITIATED" state or the data provided in invalid.
    */
   acknowledgeAttestation(): void {
-    // Validation
-    // committee should call this
-    // commitment status
-    // validate committee signature
-    if (this.commitmentState !== Attest.INITIATED) {
-      throw new Error("Cannot acknowledge attestation. Invalid state.");
-    }
+    this.validateStateTransition(
+      Attest.INITIATED,
+      Attest.ACKNOWLEDGED,
+      "committee"
+    );
     this.commitmentState = Attest.ACKNOWLEDGED;
   }
 
@@ -313,13 +370,11 @@ export class Attestation {
    * @throws Will throw an error if the attestation is not in the "ACKNOWLEDGED" state or the data provided in invalid.
    */
   acceptAttestation(): void {
-    // Validation
-    // committer should call this
-    // commitment status
-    // validate committer signature
-    if (this.commitmentState !== Attest.ACKNOWLEDGED) {
-      throw new Error("Cannot accept attestation. Invalid state.");
-    }
+    this.validateStateTransition(
+      Attest.ACKNOWLEDGED,
+      Attest.EFFECTIVE,
+      "committer"
+    );
     this.commitmentState = Attest.EFFECTIVE;
   }
 
@@ -329,13 +384,11 @@ export class Attestation {
    * @throws Will throw an error if the attestation is not in the "EFFECTIVE" state or the data provided in invalid.
    */
   dischargeAttestation(): void {
-    // Validation
-    // committer should call this
-    // commitment status
-    // validate discharge signature
-    if (this.commitmentState !== Attest.EFFECTIVE) {
-      throw new Error("Cannot discharge attestation. Invalid state.");
-    }
+    this.validateStateTransition(
+      Attest.EFFECTIVE,
+      Attest.DISCHARGED,
+      "discharge"
+    );
     this.commitmentState = Attest.DISCHARGED;
   }
 }
