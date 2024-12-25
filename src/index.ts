@@ -1,3 +1,2 @@
-export { Users } from './users';
-export { Commitment } from './commitment';
-export * from './types';
+export { Attestation } from "./attestation";
+export * from "./types";
