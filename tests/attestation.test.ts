@@ -10,13 +10,13 @@ const mockCommitteeXpub = "xpub6CUGRUonZSQ4TWtTMmzXdrXDtypWKiKrhko4egpiMZbpiaQL2
 const mockPayload = JSON.stringify({ uri: "https://pdfobject.com/pdf/sample.pdf" });
 
 describe("Attestation Test Script", () => {
-    describe("Attestation Creation", () => {
+    describe("Intitalise Attestation", () => {
         it("should generate a unique attestation ID if none is provided", () => {
             const attestation = new Attestation(
                 "",
                 mockCommitterXpub,
                 mockCommitteeXpub,
-                "",
+                "m/44'/60'/0'/0",
                 mockPayload,
                 "",
                 "",
@@ -34,7 +34,7 @@ describe("Attestation Test Script", () => {
                 customId,
                 mockCommitterXpub,
                 mockCommitteeXpub,
-                "",
+                "m/44'/60'/0'/0",
                 mockPayload,
                 "",
                 "",
