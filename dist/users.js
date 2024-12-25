@@ -48,18 +48,20 @@ class Users {
     }
     deriveXpubKey(mnemonic) {
         const seed = bip39.mnemonicToSeedSync(mnemonic);
-        const node = bip32.fromSeed(seed);
-        return node.neutered().toBase58();
+        const root = bip32.fromSeed(seed);
+        const path = "m/44'/0'/0'";
+        const account = root.derivePath(path);
+        return account.neutered().toBase58();
     }
     static listUsers() {
-        return Users.users.map(user => ({
+        return Users.users.map((user) => ({
             id: user.id,
             name: user.name,
             xpubkey: user.xpubkey,
         }));
     }
     static findById(id) {
-        return Users.users.find(user => user.id === id);
+        return Users.users.find((user) => user.id === id);
     }
     static generateMnemonic() {
         return bip39.generateMnemonic();
