@@ -15,6 +15,8 @@ export class Attestation {
    */
   public attestationId: string;
 
+  static HARDENED_OFFSET = 2 ** 31;
+
   /**
    * Public key of the committer in extended format.
    */
@@ -129,51 +131,62 @@ export class Attestation {
   }
 
   /**
-   * Converts a UUID into a deterministic BIP32 index.
-   * The resulting index will be within the BIP32 hardened index range (0x80000000 to 0xFFFFFFFF)
-   *
-   * @param uuid - The UUID to convert
-   * @returns A deterministic number suitable for BIP32 derivation
-   * @private
+   * Generates a deterministic index for HD path derivation from a string value
+   * @param value - String value to generate index from
+   * @returns A number between 0 and 2^31-1
+   * @throws Error if the input value is empty or invalid
    */
-  private uuidToDerivationIndex(uuid: string): number {
-    // Remove hyphens and convert to Buffer
-    const cleanUuid = Buffer.from(uuid.replace(/-/g, ""), "hex");
-    const hash = createHash("sha256").update(cleanUuid).digest();
+  private generateHDPathIndex(value: string): number {
+    if (!value || typeof value !== "string") {
+      throw new Error("Input value must be a non-empty string");
+    }
+    try {
+      const hash = createHash("sha256").update(value).digest("hex");
 
-    // Take the first 4 bytes and convert to number
-    const index = hash.readUInt32BE(0);
+      // Use first 8 bytes (16 hex chars) for better distribution
+      const number = parseInt(hash.slice(0, 16), 16);
 
-    // Ensure the index is hardened (add 0x80000000)
-    // This is standard practice for BIP32 key derivation
-    return index | 0x80000000;
+      // Ensure we get a valid non-hardened derivation index
+      return number % Attestation.HARDENED_OFFSET;
+    } catch (error) {
+      throw new Error(
+        `Failed to generate HD path index: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    }
   }
 
   /**
-   * Derives a child public key from a parent extended public key using the attestation ID.
-   *
-   * @param parentXpub - The parent extended public key
-   * @param attestationId - The attestation ID to use for derivation
-   * @returns The derived child public key in base58 format
-   * @private
+   * Derives a child public key from a parent extended public key using the attestation ID
+   * @param parentXpub - Parent extended public key in base58 format
+   * @param attestationId - Attestation ID to use for derivation
+   * @returns Derived child public key in base58 format
+   * @throws Error if derivation fails or inputs are invalid
    */
-  private deriveChildPubKey(parentXpub: string, attestationId: string): string {
+  public deriveChildPubKey(parentXpub: string, attestationId: string): string {
+    if (!parentXpub || typeof parentXpub !== "string") {
+      throw new Error("Parent xpub must be a non-empty string");
+    }
+    if (!attestationId || typeof attestationId !== "string") {
+      throw new Error("Attestation ID must be a non-empty string");
+    }
     try {
-      // Convert UUID to derivation index
-      const derivationIndex = this.uuidToDerivationIndex(attestationId);
-
-      // Create parent node from xpub
+      const derivationIndex = this.generateHDPathIndex(attestationId);
       const parentNode = SignatureService.bip32.fromBase58(parentXpub);
+
+      if (!parentNode.isNeutered()) {
+        throw new Error("Parent key must be a public key (xpub)");
+      }
 
       // Derive child node using calculated index
       const childNode = parentNode.derive(derivationIndex);
-
-      // Return neutered (public-only) base58 string
       return childNode.neutered().toBase58();
     } catch (error) {
-      throw new AttestationError(
-        ERROR_MESSAGES.DERIVATION_FAILED((error as Error).message),
-        ERROR_CODES.DERIVATION_FAILED
+      throw new Error(
+        `Failed to derive child public key: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
       );
     }
   }
@@ -257,7 +270,7 @@ export class Attestation {
     try {
       const seed = bip39.mnemonicToSeedSync(mnemonic);
       const root = SignatureService.bip32.fromSeed(seed);
-      const derivationIndex = this.uuidToDerivationIndex(this.attestationId);
+      const derivationIndex = this.generateHDPathIndex(this.attestationId);
       const fullDerivationPath = `${this.derivationPath}/${derivationIndex}`;
       const node = root.derivePath(fullDerivationPath);
 
