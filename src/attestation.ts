@@ -251,7 +251,7 @@ export class Attestation {
   ): boolean {
     const publicKey = type === "committee" ? this.committee : this.committer;
     return SignatureService.verifySignature(
-      JSON.stringify(this.attestationPayload),
+      this.attestationPayload,
       publicKey,
       signature
     );
