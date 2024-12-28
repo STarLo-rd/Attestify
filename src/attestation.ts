@@ -5,6 +5,10 @@ import * as bip39 from "bip39";
 import { SignatureService } from "./siganture-service";
 import { ERROR_CODES, ERROR_MESSAGES } from "./constants";
 
+const { ec: EC } = require("elliptic");
+const ec = new EC("secp256k1");
+import crypo from "crypto";
+
 /**
  * Represents an attestation lifecycle, facilitating state transitions
  * and tracking relevant details like signatures and participants.
@@ -15,7 +19,7 @@ export class Attestation {
    */
   public attestationId: string;
 
-  static HARDENED_OFFSET = 2 ** 31;
+  static HARDENED_OFFSET = 0x80000000;
 
   /**
    * Public key of the committer in extended format.
@@ -96,6 +100,7 @@ export class Attestation {
 
     // Derive specific keys for this attestation
     this.committer = this.deriveChildPubKey(committerXpub, this.attestationId);
+    console.log("this.committer", this.committer);
     this.committee = this.deriveChildPubKey(committeeXpub, this.attestationId);
 
     if (committeeSignature) {
@@ -173,7 +178,6 @@ export class Attestation {
     }
     try {
       const derivationIndex = this.generateHDPathIndex(attestationId);
-      console.log("derivationIndex: ", derivationIndex)
       const parentNode = SignatureService.bip32.fromBase58(parentXpub);
 
       if (!parentNode.isNeutered()) {
@@ -182,8 +186,11 @@ export class Attestation {
 
       // Derive child node using calculated index
       const childNode = parentNode.derive(derivationIndex);
-      console.log(Buffer.from(childNode.publicKey).toString('base64'))
-      return Buffer.from(childNode.publicKey).toString('hex');
+      const key = ec.keyFromPublic(childNode.publicKey);
+
+      const compressedPubKey = key.getPublic(true, "hex");
+      console.log("Derived child public key (compressed):", compressedPubKey);
+      return compressedPubKey;
     } catch (error) {
       throw new Error(
         `Failed to derive child public key: ${
@@ -251,12 +258,14 @@ export class Attestation {
     type: "committee" | "committer" | "discharge",
     signature: string
   ): boolean {
-    const publicKey = type === "committee" ? this.committee : this.committer;
-    return SignatureService.verifySignature(
+    const pubkey = type === "committee" ? this.committee : this.committer;
+
+    const isValid = SignatureService.verifySignature(
       this.attestationPayload,
-      publicKey,
+      pubkey,
       signature
     );
+    return isValid;
   }
 
   /**
@@ -273,22 +282,25 @@ export class Attestation {
       const seed = bip39.mnemonicToSeedSync(mnemonic);
       const root = SignatureService.bip32.fromSeed(seed);
       const derivationIndex = this.generateHDPathIndex(this.attestationId);
-      const fullDerivationPath = `${this.derivationPath}/${derivationIndex}`;
-      const node = root.derivePath(fullDerivationPath);
+      const pathNode = root.derivePath("m/44'/60'/0'/0");
+      const derivedPrivateNode = pathNode.derive(derivationIndex);
 
-      if (!node.privateKey) {
-        throw new AttestationError(
-          ERROR_MESSAGES.PRIVATE_KEY_UNAVAILABLE,
-          ERROR_CODES.SIGNING_FAILED
-        );
-      }
-      const privateKey = node.privateKey.toString();
+      const privateKey = derivedPrivateNode.privateKey;
       const signature = SignatureService.createSignature(
         this.attestationPayload,
         privateKey
       );
-      console.log('sig', signature)
-      return Buffer.from(signature).toString("hex");
+      console.log("signature", signature);
+      return signature;
+      // const keyPair = ec.keyFromPrivate(privateKey);
+      // const messageHash = createHash("sha256")
+      //   .update("Hello, this is a signed message!")
+      //   .digest("hex");
+
+      // const signature = keyPair.sign(messageHash);
+
+      // console.log("signature", signature);
+      // return signature;
     } catch (error) {
       throw new AttestationError(
         ERROR_MESSAGES.SIGNING_FAILED((error as Error).message),

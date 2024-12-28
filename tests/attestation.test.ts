@@ -23,8 +23,6 @@ const committeePathNode = committeeNode.derivePath("m/44'/60'/0'/0");
 const committerXpub = committerPathNode.neutered().toBase58();
 const committeeXpub = committeePathNode.neutered().toBase58();
 
-console.log(committerXpub)
-console.log(committeeXpub)
 
 const mockPayload = JSON.stringify({ uri: "https://pdfobject.com/pdf/sample.pdf" });
 
@@ -101,7 +99,7 @@ describe("Attestation Test Script", () => {
     //         );
     //     });
     // });
-    describe("Acknowledge Attestation", () => {
+    // describe("Acknowledge Attestation", () => {
         // it("should acknowledge an attestation", () => {
         //     const attestation = new Attestation(
         //         "uuid",
@@ -136,7 +134,7 @@ describe("Attestation Test Script", () => {
         //     attestation.acknowledgeAttestation()
         //     expect(attestation.commitmentState).toBe(Attest.ACKNOWLEDGED);
         // });
-    });
+    // });
     describe("Accept Attestation", () => {
         it("should accept an attestation", () => {
             const attestation = new Attestation(
@@ -152,6 +150,7 @@ describe("Attestation Test Script", () => {
             );
             let committeeSignature = attestation.sign(committeeMnemonic);
             attestation.setCommitteeSignature(committeeSignature);
+            console.log("attestation.committeeSignature", attestation.getCommitteeSignature())
             let committerSignature = attestation.sign(committerMnemonic);
             attestation.setCommitterSignature(committerSignature);
             attestation.acceptAttestation();
