@@ -1,7 +1,10 @@
 import { Attest, AttestationError } from "./utils";
+import * as ecc from "tiny-secp256k1";
 import { v4 as uuidv4 } from "uuid";
 import { createHash } from "crypto";
 import * as bip39 from "bip39";
+import { BIP32Factory } from "bip32";
+
 import { SignatureService } from "./siganture-service";
 import { ERROR_CODES, ERROR_MESSAGES } from "./constants";
 
@@ -13,6 +16,8 @@ const ec = new EC("secp256k1");
  * and tracking relevant details like signatures and participants.
  */
 export class Attestation {
+  public static readonly bip32 = BIP32Factory(ecc);
+  
   /**
    * Unique identifier for the attestation.
    */
@@ -176,7 +181,7 @@ export class Attestation {
     }
     try {
       const derivationIndex = this.generateHDPathIndex(attestationId);
-      const parentNode = SignatureService.bip32.fromBase58(parentXpub);
+      const parentNode = Attestation.bip32.fromBase58(parentXpub);
 
       if (!parentNode.isNeutered()) {
         throw new Error("Parent key must be a public key (xpub)");
@@ -277,7 +282,7 @@ export class Attestation {
   sign(mnemonic: string): string {
     try {
       const seed = bip39.mnemonicToSeedSync(mnemonic);
-      const root = SignatureService.bip32.fromSeed(seed);
+      const root = Attestation.bip32.fromSeed(seed);
       const derivationIndex = this.generateHDPathIndex(this.attestationId);
       const pathNode = root.derivePath("m/44'/60'/0'/0");
       const derivedPrivateNode = pathNode.derive(derivationIndex);

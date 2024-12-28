@@ -1,14 +1,10 @@
-import * as ecc from "tiny-secp256k1";
 import { createHash } from "crypto";
-import { BIP32Factory, BIP32Interface } from "bip32";
 import { AttestationError } from "./utils";
 const { ec: EC } = require("elliptic");
 const ec = new EC("secp256k1");
 import { ERROR_CODES, ERROR_MESSAGES } from "./constants";
 
 export class SignatureService {
-  public static readonly bip32 = BIP32Factory(ecc);
-
   /**
    * Verifies a signature against a payload and public key
    *
@@ -60,23 +56,5 @@ export class SignatureService {
    */
   static hashPayload(payload: string): string {
     return createHash("sha256").update(payload).digest("hex");
-  }
-
-  private static getPublicKeyNode(publicKey: string): BIP32Interface {
-    try {
-      const node = this.bip32.fromBase58(publicKey);
-      if (!node.publicKey) {
-        throw new AttestationError(
-          ERROR_MESSAGES.INVALID_PUBLIC_KEY,
-          ERROR_CODES.INVALID_PUBLIC_KEY
-        );
-      }
-      return node;
-    } catch (error) {
-      throw new AttestationError(
-        ERROR_MESSAGES.INVALID_PUBLIC_KEY_FORMAT((error as Error).message),
-        ERROR_CODES.INVALID_PUBLIC_KEY_FORMAT
-      );
-    }
   }
 }
