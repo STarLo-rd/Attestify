@@ -43,7 +43,6 @@ export class SignatureService {
       const hash = this.hashPayload(payload);
       const keyPair = ec.keyFromPrivate(privateKey);
       const signature = keyPair.sign(hash);
-      console.log("signature", signature);
       return signature;
     } catch (error) {
       throw new AttestationError(

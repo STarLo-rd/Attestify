@@ -7,7 +7,6 @@ import { ERROR_CODES, ERROR_MESSAGES } from "./constants";
 
 const { ec: EC } = require("elliptic");
 const ec = new EC("secp256k1");
-import crypo from "crypto";
 
 /**
  * Represents an attestation lifecycle, facilitating state transitions
@@ -80,7 +79,6 @@ export class Attestation {
    * @param derivativePath - user's choice of HD derivative path  TODO
    */
   constructor(
-    attestationId: string,
     committerXpub: string,
     committeeXpub: string,
     derivationPath: string,
@@ -88,7 +86,8 @@ export class Attestation {
     committerSignature: string,
     committeeSignature: string,
     dischargeSignature: string,
-    commitmentState: Attest
+    commitmentState: Attest,
+    attestationId?: string,
   ) {
     this.committerXpub = committerXpub;
     this.committeeXpub = committeeXpub;
@@ -100,7 +99,6 @@ export class Attestation {
 
     // Derive specific keys for this attestation
     this.committer = this.deriveChildPubKey(committerXpub, this.attestationId);
-    console.log("this.committer", this.committer);
     this.committee = this.deriveChildPubKey(committeeXpub, this.attestationId);
 
     if (committeeSignature) {
@@ -189,7 +187,6 @@ export class Attestation {
       const key = ec.keyFromPublic(childNode.publicKey);
 
       const compressedPubKey = key.getPublic(true, "hex");
-      console.log("Derived child public key (compressed):", compressedPubKey);
       return compressedPubKey;
     } catch (error) {
       throw new Error(
@@ -290,17 +287,7 @@ export class Attestation {
         this.attestationPayload,
         privateKey
       );
-      console.log("signature", signature);
       return signature;
-      // const keyPair = ec.keyFromPrivate(privateKey);
-      // const messageHash = createHash("sha256")
-      //   .update("Hello, this is a signed message!")
-      //   .digest("hex");
-
-      // const signature = keyPair.sign(messageHash);
-
-      // console.log("signature", signature);
-      // return signature;
     } catch (error) {
       throw new AttestationError(
         ERROR_MESSAGES.SIGNING_FAILED((error as Error).message),
