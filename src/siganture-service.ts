@@ -2,6 +2,8 @@ import * as ecc from "tiny-secp256k1";
 import { createHash } from "crypto";
 import { BIP32Factory, BIP32Interface } from "bip32";
 import { AttestationError } from "./utils";
+const { ec } = require('elliptic');
+const bip32 = require('bip32');
 import { ERROR_CODES, ERROR_MESSAGES } from "./constants";
 
 export class SignatureService {
@@ -21,9 +23,10 @@ export class SignatureService {
     signature: string
   ): boolean {
     try {
-      const node = this.getPublicKeyNode(publicKey);
+      console.log("publickey", publicKey)
+      const node = bip32.fromBase58(publicKey);
       const hash = this.hashPayload(payload);
-      return ecc.verify(hash, node.publicKey, Buffer.from(signature, "hex"));
+      return ec.keyFromPublic(publicKey).verify(hash, signature);
     } catch (error) {
       throw new AttestationError(
         ERROR_MESSAGES.SIGNATURE_VERIFICATION_FAILED((error as Error).message),
@@ -35,11 +38,17 @@ export class SignatureService {
   /**
    * Creates a signature for a payload using a private key
    */
-  public static createSignature(payload: string, privateKey: Buffer): string {
+  public static createSignature(payload: string, privateKey: string): string {
     try {
+      console.log('payload', payload)
       const hash = this.hashPayload(payload);
-      const signature = ecc.sign(hash, privateKey);
-      return Buffer.from(signature).toString("hex");
+      console.log('hash', hash)
+      
+      const ecdsa = new ec('secp256k1');
+      console.log("private key :", privateKey)
+      const keyPair = ecdsa.keyFromPrivate(privateKey);
+      const signature = keyPair.sign(hash);
+      return signature.toDER('hex');
     } catch (error) {
       throw new AttestationError(
         ERROR_MESSAGES.SIGNATURE_CREATION_FAILED((error as Error).message),
@@ -52,10 +61,10 @@ export class SignatureService {
    * Creates a SHA-256 hash of the payload
    *
    * @param payload - Data to hash
-   * @returns Buffer containing the hash
+   * @returns string containing the hash
    */
-  static hashPayload(payload: string): Buffer {
-    return createHash("sha256").update(JSON.stringify(payload)).digest();
+  static hashPayload(payload: string): string {
+    return createHash("sha256").update(payload).digest('hex');
   }
 
   private static getPublicKeyNode(publicKey: string): BIP32Interface {

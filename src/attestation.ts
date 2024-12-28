@@ -173,6 +173,7 @@ export class Attestation {
     }
     try {
       const derivationIndex = this.generateHDPathIndex(attestationId);
+      console.log("derivationIndex: ", derivationIndex)
       const parentNode = SignatureService.bip32.fromBase58(parentXpub);
 
       if (!parentNode.isNeutered()) {
@@ -181,7 +182,8 @@ export class Attestation {
 
       // Derive child node using calculated index
       const childNode = parentNode.derive(derivationIndex);
-      return childNode.neutered().toBase58();
+      console.log(Buffer.from(childNode.publicKey).toString('base64'))
+      return Buffer.from(childNode.publicKey).toString('hex');
     } catch (error) {
       throw new Error(
         `Failed to derive child public key: ${
@@ -280,12 +282,12 @@ export class Attestation {
           ERROR_CODES.SIGNING_FAILED
         );
       }
-      const privateKeyBuffer = Buffer.from(node.privateKey);
+      const privateKey = node.privateKey.toString();
       const signature = SignatureService.createSignature(
-        JSON.stringify(this.attestationPayload),
-        privateKeyBuffer
+        this.attestationPayload,
+        privateKey
       );
-
+      console.log('sig', signature)
       return Buffer.from(signature).toString("hex");
     } catch (error) {
       throw new AttestationError(
