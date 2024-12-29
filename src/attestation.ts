@@ -106,7 +106,7 @@ export class Attestation {
     this.committer = this.deriveChildPubKey(committerXpub, this.attestationId);
     this.committee = this.deriveChildPubKey(committeeXpub, this.attestationId);
 
-    if (committeeSignature) {
+    if (committerSignature) {
       if (!this.verifySignature("committer", committerSignature)) {
         throw new AttestationError(
           ERROR_MESSAGES.INVALID_SIGNATURE("committer"),

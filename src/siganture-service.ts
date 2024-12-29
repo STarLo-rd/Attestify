@@ -2,6 +2,7 @@ import { createHash } from "crypto";
 import { AttestationError } from "./utils";
 const { ec: EC } = require("elliptic");
 const ec = new EC("secp256k1");
+import { BN } from "bn.js";
 import { ERROR_CODES, ERROR_MESSAGES } from "./constants";
 
 export class SignatureService {
@@ -16,11 +17,17 @@ export class SignatureService {
   static verifySignature(
     payload: string,
     publicKey: string,
-    signature: string
+    signatureString: string
   ): boolean {
     try {
-      const hash = this.hashPayload(payload);
+      const [r, s, recoveryParam] = signatureString.split("|");
+      const hash = this.hashPayload("payload");
       const pubPoint = ec.keyFromPublic(publicKey, "hex");
+      const signature = {
+        r: new BN(r, 'hex'),
+        s: new BN(s, 'hex'),
+        recoveryParam: parseInt(recoveryParam)
+      };
       const isValid = pubPoint.verify(hash, signature);
       return isValid;
     } catch (error) {
@@ -36,10 +43,13 @@ export class SignatureService {
    */
   public static createSignature(payload: string, privateKey: any): string {
     try {
-      const hash = this.hashPayload(payload);
+      const hash = this.hashPayload("payload");
       const keyPair = ec.keyFromPrivate(privateKey);
       const signature = keyPair.sign(hash);
-      return signature;
+      return `${signature.r.toString("hex")}|${signature.s.toString("hex")}|${
+        signature.recoveryParam
+      }`;
+      // return signature;
     } catch (error) {
       throw new AttestationError(
         ERROR_MESSAGES.SIGNATURE_CREATION_FAILED((error as Error).message),
